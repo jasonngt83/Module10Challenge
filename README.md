@@ -1,4 +1,4 @@
-# 10 SQL: Employee Tracker
+# 10      
 
 ## Your Task
 
