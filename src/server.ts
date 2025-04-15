@@ -1,4 +1,4 @@
-import express from 'express';
+//import express from 'express';
 import pool  from './connection.js';
 import inquirer from 'inquirer';
 
@@ -22,6 +22,9 @@ const choice = await inquirer.prompt(
         "Update Employee Manager",
         "View Employees By Managers",
         "View Employees By Department",
+        "Delete Department",
+        "Delete Role",
+        "Delete Employee",
         "Quit",
       ],
     })
@@ -56,6 +59,15 @@ const choice = await inquirer.prompt(
           break;
         case "View Employees By Department":
           await viewEmployeesByDepartment();
+          break;
+        case "Delete Department":
+          await deleteDepartment();
+          break;
+        case "Delete Role":
+          await deleteRole();
+          break; 
+        case "Delete Employee":
+          await deleteEmployee();
           break;
         case "Quit":
           console.log("Goodbye!");
@@ -434,5 +446,179 @@ async function viewEmployeesByDepartment() {
     console.error("Error:", error);
   }
 }
+
+async function deleteDepartment() {
+  try {
+    // Fetch departments
+    const departments = await pool.query("SELECT id, department_name FROM departments ORDER BY id;");
+    if (departments.rows.length === 0) {
+      console.log("No departments found.");
+      return mainMenu();
+    }
+
+    // Prompt user to select department
+    const { department_id } = await inquirer.prompt([
+      {
+        type: "list",
+        name: "department_id",
+        message: "Select a department to delete:",
+        choices: departments.rows.map((dept: { department_name: string; id: number }) => ({
+          name: dept.department_name,
+          value: dept.id
+        }))
+      }
+    ]);
+
+    const selectedDept = departments.rows.find(dept => dept.id === department_id);
+
+    // Confirm deletion
+    const { confirmDelete } = await inquirer.prompt([
+      {
+        type: "confirm",
+        name: "confirmDelete",
+        message: `Are you sure you want to delete "${selectedDept?.department_name}"? This cannot be undone.`,
+        default: false
+      }
+    ]);
+
+    if (!confirmDelete) {
+      console.log("Deletion cancelled.");
+      return mainMenu();
+    }
+
+    // Optional: Check if any roles or employees are using this department
+    const roleCheck = await pool.query("SELECT COUNT(*) FROM roles WHERE department_id = $1;", [department_id]);
+    const roleCount = parseInt(roleCheck.rows[0].count);
+
+    if (roleCount > 0) {
+      console.log(`Cannot delete department. There are ${roleCount} role(s) associated with this department.`);
+      return mainMenu();
+    }
+
+    // Delete department
+    await pool.query("DELETE FROM departments WHERE id = $1;", [department_id]);
+    console.log(`Department "${selectedDept?.department_name}" has been deleted.`);
+
+    return mainMenu();
+  } catch (error) {
+    console.error("Error deleting department:", error);
+    return mainMenu();
+  }
+}
+
+async function deleteRole() {
+  try {
+    // Fetch roles
+    const roles = await pool.query("SELECT id, title FROM roles ORDER BY id;");
+    if (roles.rows.length === 0) {
+      console.log("No roles found.");
+      return mainMenu();
+    }
+
+    // Prompt user to select a role
+    const { role_id } = await inquirer.prompt([
+      {
+        type: "list",
+        name: "role_id",
+        message: "Select a role to delete:",
+        choices: roles.rows.map((role: { title: string; id: number }) => ({
+          name: role.title,
+          value: role.id
+        }))
+      }
+    ]);
+
+    const selectedRole = roles.rows.find(role => role.id === role_id);
+
+    // Confirm deletion
+    const { confirmDelete } = await inquirer.prompt([
+      {
+        type: "confirm",
+        name: "confirmDelete",
+        message: `Are you sure you want to delete the role "${selectedRole?.title}"? This action cannot be undone.`,
+        default: false
+      }
+    ]);
+
+    if (!confirmDelete) {
+      console.log("Deletion cancelled.");
+      return mainMenu();
+    }
+
+    // Check if any employees have this role
+    const employeeCheck = await pool.query("SELECT COUNT(*) FROM employees WHERE role_id = $1;", [role_id]);
+    const employeeCount = parseInt(employeeCheck.rows[0].count);
+
+    if (employeeCount > 0) {
+      console.log(`Cannot delete role. ${employeeCount} employee(s) are assigned to this role.`);
+      return mainMenu();
+    }
+
+    // Delete role
+    await pool.query("DELETE FROM roles WHERE id = $1;", [role_id]);
+    console.log(`Role "${selectedRole?.title}" has been deleted.`);
+
+    return mainMenu();
+  } catch (error) {
+    console.error("Error deleting role:", error);
+    return mainMenu();
+  }
+}
+
+async function deleteEmployee() {
+  try {
+    // Fetch employees
+    const employees = await pool.query(`
+      SELECT id, first_name, last_name FROM employees ORDER BY last_name, first_name;
+    `);
+
+    if (employees.rows.length === 0) {
+      console.log("No employees found.");
+      return mainMenu();
+    }
+
+    // Prompt user to select an employee
+    const { employee_id } = await inquirer.prompt([
+      {
+        type: "list",
+        name: "employee_id",
+        message: "Select an employee to delete:",
+        choices: employees.rows.map((emp: { id: number; first_name: string; last_name: string }) => ({
+          name: `${emp.first_name} ${emp.last_name}`,
+          value: emp.id
+        }))
+      }
+    ]);
+
+    const selectedEmployee = employees.rows.find(emp => emp.id === employee_id);
+
+    // Confirm deletion
+    const { confirmDelete } = await inquirer.prompt([
+      {
+        type: "confirm",
+        name: "confirmDelete",
+        message: `Are you sure you want to delete "${selectedEmployee?.first_name} ${selectedEmployee?.last_name}"?`,
+        default: false
+      }
+    ]);
+
+    if (!confirmDelete) {
+      console.log("Deletion cancelled.");
+      return mainMenu();
+    }
+
+    // Delete employee
+    await pool.query("DELETE FROM employees WHERE id = $1;", [employee_id]);
+    console.log(`Employee "${selectedEmployee?.first_name} ${selectedEmployee?.last_name}" has been deleted.`);
+
+    return mainMenu();
+  } catch (error) {
+    console.error("Error deleting employee:", error);
+    return mainMenu();
+  }
+}
+
+
+
 
 mainMenu();
